@@ -10,7 +10,7 @@ const samples = [
 
 test('buildCsv matches firmware recorder_dump_csv format (no ODR line)', () => {
   assert.equal(lib.buildCsv(meta, samples),
-`# Arrow Tracker Flight Log
+`# Sawtooth Signal Flight Log
 # Flight: 42 (slot 3)
 # Samples: 2
 # Duration: 1.234 s

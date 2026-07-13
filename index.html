@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Arrow Tracker</title>
+<title>Sawtooth Signal</title>
 <style>
   body { font-family: system-ui, sans-serif; margin: 1rem; max-width: 40rem; }
   h1 { font-size: 1.4rem; }
@@ -20,7 +20,7 @@
 </style>
 </head>
 <body>
-<h1>Arrow Tracker</h1>
+<h1>Sawtooth Signal</h1>
 <div id="unsupported" class="banner" hidden>
   Web Bluetooth is not available. Use Chrome on Android or desktop, over HTTPS.
 </div>
@@ -102,7 +102,7 @@ function parseSamples(dv) {
  * (Flight Info over BLE does not carry odr_hz). */
 function buildCsv(meta, samples, { partial = false } = {}) {
   const lines = [
-    '# Arrow Tracker Flight Log',
+    '# Sawtooth Signal Flight Log',
     `# Flight: ${meta.flightNumber} (slot ${meta.slot})`,
     `# Samples: ${meta.sampleCount}`,
   ];
@@ -174,7 +174,7 @@ const u16 = (v) => Uint8Array.of(v & 0xff, (v >> 8) & 0xff);
 async function connect() {
   try {
     device = await navigator.bluetooth.requestDevice({
-      filters: [{ name: 'Arrow Tracker' }],
+      filters: [{ name: 'Sawtooth Signal' }],
       optionalServices: [SERVICE_UUID],
     });
     device.addEventListener('gattserverdisconnected', onDisconnected);
