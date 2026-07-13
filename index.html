@@ -174,7 +174,7 @@ const u16 = (v) => Uint8Array.of(v & 0xff, (v >> 8) & 0xff);
 async function connect() {
   try {
     device = await navigator.bluetooth.requestDevice({
-      filters: [{ name: 'Sawtooth Signal' }],
+      filters: [{ namePrefix: 'Sawtooth Signal' }],
       optionalServices: [SERVICE_UUID],
     });
     device.addEventListener('gattserverdisconnected', onDisconnected);
