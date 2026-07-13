@@ -385,12 +385,9 @@ $('btn-reconnect').addEventListener('click', () => connectGatt().catch((e) => {
 }));
 
 /* --- Config editor --- */
-/* ADXL ODR (0x05) and Record ADXL (0x07) are omitted: the ADXL372 is not
- * usable in the current firmware (raw-SPI driver issues; LSM is the only
- * launch/recording source). The GATT characteristics still exist. */
+/* The ADXL372 config surface (chars 0x01/0x05/0x07) was removed from the
+ * firmware along with the rest of the dead ADXL path. */
 const CONFIG_FIELDS = [
-  { id: 0x01, label: 'Launch Source', type: 'u8', input: 'select',
-    options: { 0: 'ADXL', 1: 'LSM', 2: 'Either' } },
   { id: 0x02, label: 'Launch Threshold (mg)', type: 'u32', input: 'number' },
   { id: 0x03, label: 'Inactivity Threshold (mg)', type: 'u32', input: 'number' },
   { id: 0x04, label: 'Inactivity Timeout (ms)', type: 'u32', input: 'number' },
