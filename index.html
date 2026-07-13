@@ -386,11 +386,16 @@ $('btn-reconnect').addEventListener('click', () => connectGatt().catch((e) => {
 
 /* --- Config editor --- */
 /* The ADXL372 config surface (chars 0x01/0x05/0x07) was removed from the
- * firmware along with the rest of the dead ADXL path. */
+ * firmware along with the rest of the dead ADXL path. Valid ranges shown
+ * in labels are enforced by firmware validation (rejects out-of-range). */
 const CONFIG_FIELDS = [
-  { id: 0x02, label: 'Launch Threshold (mg)', type: 'u32', input: 'number' },
-  { id: 0x03, label: 'Inactivity Threshold (mg)', type: 'u32', input: 'number' },
-  { id: 0x04, label: 'Inactivity Timeout (ms)', type: 'u32', input: 'number' },
+  { id: 0x0B, label: 'Launch Source', type: 'u8', input: 'select',
+    options: { 0: 'Accel', 1: 'Gyro', 2: 'Either' } },
+  { id: 0x02, label: 'Launch Threshold (mg, 500–200000)', type: 'u32', input: 'number' },
+  { id: 0x0C, label: 'Launch Gyro Threshold (mrad/s, 50–20000; FS rails at 2182)', type: 'u32', input: 'number' },
+  { id: 0x03, label: 'Inactivity Threshold (mg, 100–10000)', type: 'u32', input: 'number' },
+  { id: 0x04, label: 'Inactivity Timeout (ms, 500–30000)', type: 'u32', input: 'number' },
+  { id: 0x0D, label: 'Gyro Quiet — landing (mrad/s, 10–2000)', type: 'u32', input: 'number' },
   { id: 0x06, label: 'LSM ODR (DT value)', type: 'u8', input: 'number' },
   { id: 0x08, label: 'Record LSM Accel', type: 'u8', input: 'checkbox' },
   { id: 0x09, label: 'Record LSM Gyro', type: 'u8', input: 'checkbox' },
