@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arrow Tracker</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1rem; max-width: 40rem; }
+  h1 { font-size: 1.4rem; }
+  button { padding: 0.5rem 1rem; margin: 0.2rem 0; font-size: 1rem; }
+  table { border-collapse: collapse; width: 100%; margin: 0.5rem 0; }
+  th, td { border: 1px solid #999; padding: 0.3rem 0.5rem; text-align: left; font-size: 0.9rem; }
+  .status { padding: 0.4rem; margin: 0.5rem 0; background: #eef; border-radius: 4px; }
+  .status.error { background: #fdd; }
+  .banner { padding: 0.6rem; background: #fdd; border: 1px solid #c00; border-radius: 4px; }
+  progress { width: 100%; height: 1.2rem; }
+  #config-fields label { display: block; margin: 0.4rem 0; }
+  #config-fields input[type=number] { width: 8rem; }
+  .danger { background: #c33; color: #fff; border: none; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>Arrow Tracker</h1>
+<div id="unsupported" class="banner" hidden>
+  Web Bluetooth is not available. Use Chrome on Android or desktop, over HTTPS.
+</div>
+<div id="status" class="status">Not connected</div>
+<button id="btn-connect">Connect</button>
+<button id="btn-reconnect" hidden>Reconnect</button>
+
+<section id="flights-section" hidden>
+  <h2>Flights</h2>
+  <div id="no-flights" hidden>No flights stored.</div>
+  <table id="flight-table">
+    <thead><tr><th>Slot</th><th>Flight #</th><th>Samples</th><th>Duration</th><th>DL'd</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div id="xfer" hidden>
+    <progress id="xfer-progress" max="100" value="0"></progress>
+    <div id="xfer-label"></div>
+    <button id="btn-save-partial" hidden>Save partial CSV</button>
+  </div>
+  <button id="btn-erase" class="danger">Erase all flights</button>
+</section>
+
+<details id="config-section" hidden>
+  <summary>Configuration</summary>
+  <div id="config-fields"></div>
+</details>
+
+<script id="arrow-lib">
+'use strict';
+/* Pure protocol logic — no DOM, no BLE. Unit-tested under Node
+ * (test/_extract.mjs extracts this block). Keep it that way. */
+
+const SERVICE_UUID = 'a3300001-0000-1000-8000-00805f9b34fb';
+const SAMPLE_SIZE = 16;
+
+function charUuid(n) {
+  const grp = (0x8000 + n).toString(16).padStart(4, '0');
+  return `a3300001-0000-1000-${grp}-00805f9b34fb`;
+}
+
+const SENSOR_NAMES = ['ADXL', 'LSM_A', 'LSM_G', 'MAG'];
+function sensorName(id) {
+  return SENSOR_NAMES[id] ?? '???';
+}
+
+function parseFlightInfo(dv) {
+  return {
+    flightNumber: dv.getUint32(0, true),
+    sampleCount: dv.getUint32(4, true),
+    durationMs: dv.getUint32(8, true),
+    downloaded: dv.getUint8(12) === 1,
+  };
+}
+
+/* Parse whole 16-byte samples from one notification payload.
+ * The terminator record (sensor_id 0xFF) ends the stream and is not
+ * included in the returned samples. */
+function parseSamples(dv) {
+  const samples = [];
+  let sawTerminator = false;
+  for (let off = 0; off + SAMPLE_SIZE <= dv.byteLength; off += SAMPLE_SIZE) {
+    const sensorId = dv.getUint8(off + 10);
+    if (sensorId === 0xFF) {
+      sawTerminator = true;
+      break;
+    }
+    samples.push({
+      timestampMs: dv.getUint32(off, true),
+      x: dv.getInt16(off + 4, true),
+      y: dv.getInt16(off + 6, true),
+      z: dv.getInt16(off + 8, true),
+      sensorId,
+    });
+  }
+  return { samples, sawTerminator };
+}
+
+/* CSV format mirrors firmware recorder_dump_csv(), minus the "# ODR:" line
+ * (Flight Info over BLE does not carry odr_hz). */
+function buildCsv(meta, samples, { partial = false } = {}) {
+  const lines = [
+    '# Arrow Tracker Flight Log',
+    `# Flight: ${meta.flightNumber} (slot ${meta.slot})`,
+    `# Samples: ${meta.sampleCount}`,
+  ];
+  if (partial) {
+    lines.push(`# PARTIAL: received ${samples.length} of ${meta.sampleCount} samples`);
+  }
+  const sec = Math.floor(meta.durationMs / 1000);
+  const ms = String(meta.durationMs % 1000).padStart(3, '0');
+  lines.push(`# Duration: ${sec}.${ms} s`);
+  lines.push('timestamp_ms,sensor,x,y,z');
+  for (const s of samples) {
+    lines.push(`${s.timestampMs},${sensorName(s.sensorId)},${s.x},${s.y},${s.z}`);
+  }
+  lines.push('# End of recording');
+  return lines.join('\n') + '\n';
+}
+
+if (typeof module !== 'undefined') {
+  module.exports = { SERVICE_UUID, SAMPLE_SIZE, charUuid, sensorName,
+                     parseFlightInfo, parseSamples, buildCsv };
+}
+</script>
+
+<script>
+'use strict';
+
+/* --- DOM handles --- */
+const $ = (id) => document.getElementById(id);
+const statusEl = $('status');
+
+function setStatus(msg, isError = false) {
+  statusEl.textContent = msg;
+  statusEl.classList.toggle('error', isError);
+}
+
+if (!('bluetooth' in navigator)) {
+  $('unsupported').hidden = false;
+  $('btn-connect').disabled = true;
+}
+
+/* --- BLE state --- */
+let device = null;
+let charsByUuid = {};
+let flights = [];
+
+function char(n) {
+  const c = charsByUuid[charUuid(n)];
+  if (!c) throw new Error(`Characteristic 0x${n.toString(16)} not found`);
+  return c;
+}
+
+/* Web Bluetooth rejects concurrent GATT operations — serialize them. */
+let opQueue = Promise.resolve();
+function gattOp(fn) {
+  const p = opQueue.then(fn);
+  opQueue = p.catch(() => {});
+  return p;
+}
+
+const read = (n) => gattOp(() => char(n).readValue());
+const write = (n, bytes) => gattOp(() => {
+  const c = char(n);
+  const data = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
+  return c.writeValueWithResponse ? c.writeValueWithResponse(data) : c.writeValue(data);
+});
+const u16 = (v) => Uint8Array.of(v & 0xff, (v >> 8) & 0xff);
+
+/* --- Connect --- */
+async function connect() {
+  try {
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ name: 'Arrow Tracker' }],
+      optionalServices: [SERVICE_UUID],
+    });
+    device.addEventListener('gattserverdisconnected', onDisconnected);
+    await connectGatt();
+  } catch (e) {
+    setStatus(`Connect failed: ${e.message}`, true);
+  }
+}
+
+async function connectGatt() {
+  setStatus('Connecting…');
+  $('btn-reconnect').hidden = true;
+  const server = await device.gatt.connect();
+  setStatus('Discovering service…');
+  const service = await server.getPrimaryService(SERVICE_UUID);
+  charsByUuid = {};
+  for (const c of await service.getCharacteristics()) {
+    charsByUuid[c.uuid] = c;
+  }
+  const stream = char(0x20);
+  stream.addEventListener('characteristicvaluechanged', onData);
+  await gattOp(() => stream.startNotifications());
+  await refreshFlights();
+  let cfgErr = null;
+  try {
+    await readConfig();
+  } catch (e) {
+    cfgErr = e;
+  }
+  $('flights-section').hidden = false;
+  $('btn-connect').hidden = true;
+  if (cfgErr) {
+    setStatus(`Connected — config read failed: ${cfgErr.message}`, true);
+  } else {
+    setStatus('Connected');
+  }
+}
+
+function onDisconnected() {
+  setStatus('Disconnected', true);
+  $('btn-reconnect').hidden = false;
+  if (typeof onXferDisconnected === 'function') onXferDisconnected();
+}
+
+/* --- Flight table --- */
+async function refreshFlights() {
+  const count = (await read(0x12)).getUint16(0, true);
+  flights = [];
+  for (let i = 0; i < count; i++) {
+    await write(0x13, u16(i));
+    const info = parseFlightInfo(await read(0x14));
+    flights.push({ slot: i, ...info });
+  }
+  renderFlights();
+}
+
+function renderFlights() {
+  const tbody = $('flight-table').querySelector('tbody');
+  tbody.textContent = '';
+  $('no-flights').hidden = flights.length > 0;
+  $('flight-table').hidden = flights.length === 0;
+  for (const f of flights) {
+    const tr = document.createElement('tr');
+    const dur = `${Math.floor(f.durationMs / 1000)}.${String(f.durationMs % 1000).padStart(3, '0')} s`;
+    tr.innerHTML =
+      `<td>${f.slot}</td><td>${f.flightNumber}</td><td>${f.sampleCount}</td>` +
+      `<td>${dur}</td><td>${f.downloaded ? '✓' : ''}</td><td></td>`;
+    const btn = document.createElement('button');
+    btn.textContent = 'Download';
+    btn.addEventListener('click', () => downloadFlight(f.slot));
+    tr.lastElementChild.appendChild(btn);
+    tbody.appendChild(tr);
+  }
+}
+
+/* --- Data transfer --- */
+const STALL_MS = 5000;
+let xfer = null; // { meta, samples, stallTimer }
+
+function onData(event) {
+  if (!xfer) return;
+  const { samples, sawTerminator } = parseSamples(event.target.value);
+  xfer.samples.push(...samples);
+  armStallTimer();
+  const pct = Math.min(100, Math.round(100 * xfer.samples.length / (xfer.meta.sampleCount || 1)));
+  $('xfer-progress').value = pct;
+  $('xfer-label').textContent =
+    `Flight ${xfer.meta.flightNumber}: ${xfer.samples.length} / ${xfer.meta.sampleCount} samples`;
+  if (sawTerminator) finishTransfer();
+}
+
+function armStallTimer() {
+  clearTimeout(xfer.stallTimer);
+  xfer.stallTimer = setTimeout(onStall, STALL_MS);
+}
+
+async function downloadFlight(slot) {
+  if (xfer || eraseBtn.disabled) return; // one transfer at a time; not during erase
+  const f = flights[slot];
+  xfer = { meta: f, samples: [], stallTimer: null };
+  $('xfer').hidden = false;
+  $('btn-save-partial').hidden = true;
+  $('xfer-progress').value = 0;
+  $('xfer-label').textContent = `Flight ${f.flightNumber}: starting…`;
+  setStatus(`Downloading flight ${f.flightNumber}…`);
+  try {
+    await write(0x13, u16(slot));
+    await write(0x21, [0x01]); // DATA_CMD_START_DUMP
+    armStallTimer();
+  } catch (e) {
+    abortTransfer(`Start failed: ${e.message}`);
+  }
+}
+
+function finishTransfer() {
+  const { meta, samples } = xfer;
+  clearTimeout(xfer.stallTimer);
+  xfer = null;
+  $('xfer').hidden = true;
+  saveBlob(buildCsv(meta, samples), `flight_${meta.flightNumber}.csv`);
+  setStatus(`Flight ${meta.flightNumber} downloaded (${samples.length} samples)`);
+  refreshFlights().catch((e) => setStatus(`Refresh failed: ${e.message}`, true));
+}
+
+function onStall() {
+  write(0x21, [0x02]).catch(() => {}); // DATA_CMD_STOP_DUMP, best effort
+  abortTransfer(`Transfer stalled (no data for ${STALL_MS / 1000} s)`);
+}
+
+function onXferDisconnected() {
+  if (xfer) abortTransfer('Disconnected mid-transfer');
+}
+
+/* Keep accumulated samples; offer partial save. */
+function abortTransfer(reason) {
+  if (!xfer) return;
+  clearTimeout(xfer.stallTimer);
+  setStatus(reason, true);
+  $('xfer-label').textContent =
+    `Stopped at ${xfer.samples.length} / ${xfer.meta.sampleCount} samples`;
+  $('btn-save-partial').hidden = xfer.samples.length === 0;
+  const { meta, samples } = xfer;
+  xfer = null;
+  $('btn-save-partial').onclick = () => {
+    saveBlob(buildCsv(meta, samples, { partial: true }),
+             `flight_${meta.flightNumber}_partial.csv`);
+    $('xfer').hidden = true;
+  };
+}
+
+function saveBlob(text, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+/* --- Erase (two-step confirm) --- */
+let eraseArmed = false;
+let eraseDisarmTimer = null;
+const eraseBtn = $('btn-erase');
+
+eraseBtn.addEventListener('click', async () => {
+  if (!eraseArmed) {
+    eraseArmed = true;
+    eraseBtn.textContent = `Really erase ${flights.length} flight(s)? Tap again`;
+    eraseDisarmTimer = setTimeout(disarmErase, 5000);
+    return;
+  }
+  disarmErase();
+  if (xfer) { setStatus('Download in progress — wait or stop it before erasing', true); return; }
+  eraseBtn.disabled = true;
+  try {
+    await write(0x21, [0x03]); // DATA_CMD_ERASE
+    setStatus('Erasing…');
+    await pollUntilErased();
+    await refreshFlights();
+    setStatus('All flights erased');
+  } catch (e) {
+    setStatus(`Erase failed: ${e.message}`, true);
+    refreshFlights().catch(() => {});
+  } finally {
+    eraseBtn.disabled = false;
+  }
+});
+
+function disarmErase() {
+  clearTimeout(eraseDisarmTimer);
+  eraseArmed = false;
+  eraseBtn.textContent = 'Erase all flights';
+}
+
+/* The main loop erases asynchronously; poll flight count until 0. */
+async function pollUntilErased() {
+  for (let i = 0; i < 15; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    const count = (await read(0x12)).getUint16(0, true);
+    if (count === 0) return;
+  }
+  throw new Error('device still reports flights after 15 s');
+}
+
+$('btn-connect').addEventListener('click', connect);
+$('btn-reconnect').addEventListener('click', () => connectGatt().catch((e) => {
+  $('btn-reconnect').hidden = false;
+  setStatus(`Reconnect failed: ${e.message}`, true);
+}));
+
+/* --- Config editor --- */
+const CONFIG_FIELDS = [
+  { id: 0x01, label: 'Launch Source', type: 'u8', input: 'select',
+    options: { 0: 'ADXL', 1: 'LSM', 2: 'Either' } },
+  { id: 0x02, label: 'Launch Threshold (mg)', type: 'u32', input: 'number' },
+  { id: 0x03, label: 'Inactivity Threshold (mg)', type: 'u32', input: 'number' },
+  { id: 0x04, label: 'Inactivity Timeout (ms)', type: 'u32', input: 'number' },
+  { id: 0x05, label: 'ADXL ODR', type: 'u8', input: 'select',
+    options: { 0: '400 Hz', 1: '800 Hz', 2: '1600 Hz', 3: '3200 Hz', 4: '6400 Hz' } },
+  { id: 0x06, label: 'LSM ODR (DT value)', type: 'u8', input: 'number' },
+  { id: 0x07, label: 'Record ADXL', type: 'u8', input: 'checkbox' },
+  { id: 0x08, label: 'Record LSM Accel', type: 'u8', input: 'checkbox' },
+  { id: 0x09, label: 'Record LSM Gyro', type: 'u8', input: 'checkbox' },
+  { id: 0x0A, label: 'Record Magnetometer', type: 'u8', input: 'checkbox' },
+];
+
+function decodeCfg(field, dv) {
+  return field.type === 'u32' ? dv.getUint32(0, true) : dv.getUint8(0);
+}
+
+function encodeCfg(field, value) {
+  if (field.type === 'u32') {
+    const b = new Uint8Array(4);
+    new DataView(b.buffer).setUint32(0, value, true);
+    return b;
+  }
+  return Uint8Array.of(value & 0xff);
+}
+
+function buildConfigUi() {
+  const wrap = $('config-fields');
+  wrap.textContent = '';
+  for (const field of CONFIG_FIELDS) {
+    const label = document.createElement('label');
+    let el;
+    if (field.input === 'select') {
+      el = document.createElement('select');
+      for (const [v, name] of Object.entries(field.options)) {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = name;
+        el.appendChild(opt);
+      }
+    } else {
+      el = document.createElement('input');
+      el.type = field.input; // 'number' or 'checkbox'
+    }
+    el.id = `cfg-${field.id}`;
+    el.addEventListener('change', () => writeConfigField(field, el));
+    label.append(`${field.label} `, el);
+    wrap.appendChild(label);
+  }
+}
+
+function setFieldValue(field, el, value) {
+  if (field.input === 'checkbox') el.checked = value === 1;
+  else el.value = String(value);
+}
+
+async function readConfig() {
+  for (const field of CONFIG_FIELDS) {
+    const value = decodeCfg(field, await read(field.id));
+    setFieldValue(field, $(`cfg-${field.id}`), value);
+  }
+  $('config-section').hidden = false;
+}
+
+/* Write, then read back — the firmware validates and may reject or clamp. */
+async function writeConfigField(field, el) {
+  const raw = field.input === 'checkbox' ? (el.checked ? 1 : 0) : Number(el.value);
+  let writeFailed = false;
+  try {
+    await write(field.id, encodeCfg(field, raw));
+    setStatus(`${field.label} saved`);
+  } catch (e) {
+    writeFailed = true;
+    setStatus(`${field.label} rejected: ${e.message}`, true);
+  }
+  try {
+    setFieldValue(field, el, decodeCfg(field, await read(field.id)));
+  } catch (e) {
+    if (!writeFailed) {
+      setStatus(`${field.label} read-back failed: ${e.message}`, true);
+    }
+  }
+}
+
+buildConfigUi();
+</script>
+</body>
+</html>
