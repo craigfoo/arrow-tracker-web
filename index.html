@@ -385,16 +385,16 @@ $('btn-reconnect').addEventListener('click', () => connectGatt().catch((e) => {
 }));
 
 /* --- Config editor --- */
+/* ADXL ODR (0x05) and Record ADXL (0x07) are omitted: the ADXL372 is not
+ * usable in the current firmware (raw-SPI driver issues; LSM is the only
+ * launch/recording source). The GATT characteristics still exist. */
 const CONFIG_FIELDS = [
   { id: 0x01, label: 'Launch Source', type: 'u8', input: 'select',
     options: { 0: 'ADXL', 1: 'LSM', 2: 'Either' } },
   { id: 0x02, label: 'Launch Threshold (mg)', type: 'u32', input: 'number' },
   { id: 0x03, label: 'Inactivity Threshold (mg)', type: 'u32', input: 'number' },
   { id: 0x04, label: 'Inactivity Timeout (ms)', type: 'u32', input: 'number' },
-  { id: 0x05, label: 'ADXL ODR', type: 'u8', input: 'select',
-    options: { 0: '400 Hz', 1: '800 Hz', 2: '1600 Hz', 3: '3200 Hz', 4: '6400 Hz' } },
   { id: 0x06, label: 'LSM ODR (DT value)', type: 'u8', input: 'number' },
-  { id: 0x07, label: 'Record ADXL', type: 'u8', input: 'checkbox' },
   { id: 0x08, label: 'Record LSM Accel', type: 'u8', input: 'checkbox' },
   { id: 0x09, label: 'Record LSM Gyro', type: 'u8', input: 'checkbox' },
   { id: 0x0A, label: 'Record Magnetometer', type: 'u8', input: 'checkbox' },
