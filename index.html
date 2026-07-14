@@ -433,11 +433,30 @@ async function connectGatt() {
   }
 }
 
-function onDisconnected() {
-  setStatus('Disconnected', true);
+/* Back to the initial connect view (user chose to leave). */
+function resetToConnectView() {
+  $('flights-section').hidden = true;
+  $('config-section').hidden = true;
   $('btn-disconnect').hidden = true;
-  $('btn-reconnect').hidden = false;
+  $('btn-reconnect').hidden = true;
+  $('btn-connect').hidden = false;
+  setStatus('No arrow on the line — wake it, then connect');
+}
+
+let userDisconnect = false;
+
+function onDisconnected() {
+  $('btn-disconnect').hidden = true;
   if (typeof onXferDisconnected === 'function') onXferDisconnected();
+  if (userDisconnect) {
+    userDisconnect = false;
+    resetToConnectView();
+    return;
+  }
+  /* Unexpected drop — keep the table (a partial save may be pending)
+   * and offer Reconnect. */
+  setStatus('Disconnected', true);
+  $('btn-reconnect').hidden = false;
 }
 
 /* --- Flight table --- */
@@ -601,8 +620,13 @@ async function pollUntilErased() {
 
 $('btn-connect').addEventListener('click', connect);
 $('btn-disconnect').addEventListener('click', () => {
-  /* gattserverdisconnected fires and onDisconnected handles the UI */
-  if (device && device.gatt.connected) device.gatt.disconnect();
+  if (device && device.gatt.connected) {
+    /* gattserverdisconnected fires and onDisconnected resets the view */
+    userDisconnect = true;
+    device.gatt.disconnect();
+  } else {
+    resetToConnectView();   /* link already gone — reset directly */
+  }
 });
 $('btn-reconnect').addEventListener('click', () => connectGatt().catch((e) => {
   $('btn-reconnect').hidden = false;
