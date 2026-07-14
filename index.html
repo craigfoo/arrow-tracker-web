@@ -3,40 +3,261 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#141F19">
 <title>Sawtooth Signal</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 L26 22 L16 17 L6 22 Z' fill='%23FF6B1A'/%3E%3Crect x='15' y='17' width='2' height='13' fill='%23E8E4D8'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders:wght@500;700&family=Barlow:wght@400;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
-  body { font-family: system-ui, sans-serif; margin: 1rem; max-width: 40rem; }
-  h1 { font-size: 1.4rem; }
-  button { padding: 0.5rem 1rem; margin: 0.2rem 0; font-size: 1rem; }
-  table { border-collapse: collapse; width: 100%; margin: 0.5rem 0; }
-  th, td { border: 1px solid #999; padding: 0.3rem 0.5rem; text-align: left; font-size: 0.9rem; }
-  .status { padding: 0.4rem; margin: 0.5rem 0; background: #eef; border-radius: 4px; }
-  .status.error { background: #fdd; }
-  .banner { padding: 0.6rem; background: #fdd; border: 1px solid #c00; border-radius: 4px; }
-  progress { width: 100%; height: 1.2rem; }
-  #config-fields label { display: block; margin: 0.4rem 0; }
-  #config-fields input[type=number] { width: 8rem; }
-  .danger { background: #c33; color: #fff; border: none; border-radius: 4px; }
+  :root {
+    --pine:   #141F19;   /* pre-dawn timber */
+    --timber: #1E2B23;   /* raised panels */
+    --moss:   #37473C;   /* lines & borders */
+    --bone:   #E8E4D8;   /* primary text (antler) */
+    --sage:   #97A695;   /* secondary text */
+    --blaze:  #FF6B1A;   /* the live thing — safety orange */
+    --blood:  #A6402C;   /* destructive */
+    --disp: "Big Shoulders", "Arial Narrow", sans-serif;
+    --body: "Barlow", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: var(--body);
+    background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420' viewBox='0 0 420 420'%3E%3Cg fill='none' stroke='%23E8E4D8' stroke-opacity='0.045' stroke-width='1.2'%3E%3Cpath d='M-20 330 C 90 250 140 320 230 270 S 400 300 460 230'/%3E%3Cpath d='M-20 370 C 100 290 160 360 250 310 S 420 340 460 270'/%3E%3Cpath d='M-30 120 C 60 60 150 140 240 90 S 380 60 450 110'/%3E%3Cpath d='M-30 80 C 70 20 160 100 250 50 S 390 20 450 70'/%3E%3Ccircle cx='330' cy='190' r='36'/%3E%3Ccircle cx='330' cy='190' r='58'/%3E%3C/g%3E%3C/svg%3E"),
+      var(--pine);
+    color: var(--bone);
+    margin: 0;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 26.5rem; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+
+  /* --- Masthead --- */
+  .masthead { display: flex; align-items: center; gap: 0.75rem; padding: 0.25rem 0 1.25rem; }
+  .masthead svg { flex: none; }
+  h1 {
+    font-family: var(--disp); font-weight: 700; font-size: 2rem;
+    letter-spacing: 0.04em; text-transform: uppercase; margin: 0; line-height: 0.95;
+  }
+  .tagline {
+    margin: 0.15rem 0 0; color: var(--sage);
+    font-size: 0.72rem; letter-spacing: 0.22em; text-transform: uppercase;
+  }
+
+  /* --- Reticle hero (the connect moment) --- */
+  .range { text-align: center; padding: 0.5rem 0 1.5rem; }
+  #btn-connect {
+    display: inline-grid; place-items: center;
+    width: 11.5rem; height: 11.5rem; padding: 0;
+    background: radial-gradient(circle at 50% 42%, #24332A 0%, var(--timber) 62%, var(--pine) 100%);
+    border: 1.5px solid var(--moss); border-radius: 50%;
+    color: var(--bone); cursor: pointer; position: relative;
+    font-family: var(--disp); font-size: 1.3rem; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  #btn-connect .ret { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #btn-connect .ret circle, #btn-connect .ret line { stroke: var(--sage); }
+  #btn-connect .ret .hair { stroke: var(--blaze); }
+  #btn-connect span { position: relative; margin-top: 4.4rem; }
+  #btn-connect small {
+    position: absolute; top: 2.6rem; left: 0; right: 0;
+    font-family: var(--mono); font-size: 0.62rem; font-weight: 400;
+    letter-spacing: 0.28em; color: var(--sage);
+  }
+  #btn-connect:hover, #btn-connect:focus-visible {
+    border-color: var(--blaze);
+    box-shadow: 0 0 0 3px rgba(255, 107, 26, 0.18), 0 0 34px rgba(255, 107, 26, 0.10);
+  }
+  #btn-connect:hover .ret { animation: sweep 6s linear infinite; }
+  @keyframes sweep { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    #btn-connect:hover .ret { animation: none; }
+  }
+  #btn-connect:disabled { opacity: 0.45; cursor: not-allowed; }
+  #btn-reconnect { margin-top: 0.75rem; }
+
+  /* --- Status line --- */
+  .status {
+    margin: 0.9rem auto 0; padding: 0.5rem 0.9rem; max-width: 24rem;
+    font-family: var(--mono); font-size: 0.8rem; color: var(--sage);
+    background: var(--timber); border: 1px solid var(--moss); border-radius: 3px;
+    border-left: 3px solid var(--sage);
+  }
+  .status.error { color: var(--bone); border-left-color: var(--blaze); background: #2A251C; }
+
+  .banner {
+    padding: 0.8rem 1rem; margin-bottom: 1rem;
+    background: #2A251C; border: 1px solid var(--blood); border-radius: 3px;
+    color: var(--bone); font-size: 0.9rem;
+  }
+
+  /* --- Sections --- */
+  section, details { margin-top: 1.75rem; }
+  .eyebrow, summary {
+    font-family: var(--disp); font-size: 1.25rem; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase; color: var(--bone);
+    margin: 0 0 0.2rem;
+  }
+  .eyebrow::before, summary::before {
+    content: "»"; color: var(--blaze); margin-right: 0.45rem;
+  }
+  .subhead {
+    color: var(--sage); font-size: 0.72rem; letter-spacing: 0.18em;
+    text-transform: uppercase; margin: 0 0 0.8rem;
+  }
+
+  /* --- Quiver (flight table) --- */
+  #no-flights {
+    padding: 1.1rem; color: var(--sage); font-size: 0.9rem;
+    border: 1px dashed var(--moss); border-radius: 3px;
+  }
+  table { border-collapse: collapse; width: 100%; margin: 0.4rem 0 0.9rem; }
+  th {
+    font-family: var(--body); font-weight: 600; font-size: 0.68rem;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--sage);
+    text-align: left; padding: 0.35rem 0.5rem;
+    border-bottom: 1px solid var(--moss);
+  }
+  td {
+    font-family: var(--mono); font-size: 0.8rem; padding: 0.55rem 0.5rem;
+    border-bottom: 1px solid rgba(55, 71, 60, 0.55);
+  }
+  tbody tr:hover { background: rgba(232, 228, 216, 0.03); }
+  @media (max-width: 420px) {
+    th:nth-child(1), td:nth-child(1),
+    th:nth-child(3), td:nth-child(3) { display: none; }
+  }
+
+  /* --- Buttons --- */
+  button {
+    font-family: var(--body); font-weight: 600; font-size: 0.85rem;
+    letter-spacing: 0.04em;
+    color: var(--bone); background: var(--timber);
+    border: 1px solid var(--moss); border-radius: 3px;
+    padding: 0.45rem 0.9rem; cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  button:hover { border-color: var(--sage); }
+  button:focus-visible { outline: 2px solid var(--blaze); outline-offset: 2px; }
+  td button { padding: 0.3rem 0.7rem; font-size: 0.75rem; border-color: var(--blaze); color: var(--blaze); background: transparent; }
+  td button:hover { background: rgba(255, 107, 26, 0.12); }
+  .danger { border-color: var(--blood); color: #D8907F; background: transparent; }
+  .danger:hover { background: rgba(166, 64, 44, 0.15); border-color: var(--blood); }
+  .danger:disabled { opacity: 0.5; cursor: wait; }
+
+  /* --- Flight path (download progress) --- */
+  #xfer { margin: 0.6rem 0 1rem; }
+  .flightpath { position: relative; padding-right: 1rem; }
+  progress {
+    -webkit-appearance: none; appearance: none;
+    display: block; width: 100%; height: 0.55rem;
+    border: none; background: var(--timber);
+    border-radius: 999px; overflow: hidden;
+    outline: 1px solid var(--moss);
+  }
+  progress::-webkit-progress-bar { background: var(--timber); }
+  progress::-webkit-progress-value {
+    background: linear-gradient(90deg, rgba(255,107,26,0.35), var(--blaze));
+    border-radius: 999px;
+  }
+  progress::-moz-progress-bar {
+    background: linear-gradient(90deg, rgba(255,107,26,0.35), var(--blaze));
+    border-radius: 999px;
+  }
+  .flightpath::after {   /* broadhead tracer at the track's end */
+    content: ""; position: absolute; right: 0; top: 50%;
+    transform: translateY(-50%);
+    border-left: 0.55rem solid var(--moss);
+    border-top: 0.35rem solid transparent;
+    border-bottom: 0.35rem solid transparent;
+  }
+  #xfer-label {
+    font-family: var(--mono); font-size: 0.75rem; color: var(--sage);
+    margin-top: 0.45rem;
+  }
+  #btn-save-partial { margin-top: 0.5rem; }
+
+  /* --- Tuning (config) --- */
+  details { border-top: 1px solid var(--moss); padding-top: 1.1rem; }
+  summary { cursor: pointer; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary .subhead { display: block; margin-top: 0.2rem; }
+  #config-fields { margin-top: 0.9rem; display: grid; gap: 0.15rem; }
+  #config-fields label {
+    display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+    padding: 0.55rem 0.6rem; font-size: 0.85rem; color: var(--bone);
+    border-bottom: 1px solid rgba(55, 71, 60, 0.45);
+  }
+  #config-fields select, #config-fields input[type=number] {
+    font-family: var(--mono); font-size: 0.8rem;
+    color: var(--bone); background: var(--timber);
+    border: 1px solid var(--moss); border-radius: 3px;
+    padding: 0.35rem 0.5rem; max-width: 55%;
+  }
+  #config-fields input[type=checkbox] { width: 1.05rem; height: 1.05rem; accent-color: var(--blaze); }
+  #config-fields select:focus-visible, #config-fields input:focus-visible {
+    outline: 2px solid var(--blaze); outline-offset: 1px;
+  }
+
+  footer {
+    margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--moss);
+    color: var(--sage); font-family: var(--mono); font-size: 0.68rem;
+    letter-spacing: 0.08em;
+  }
 </style>
 </head>
 <body>
-<h1>Sawtooth Signal</h1>
+<div class="wrap">
+
+<header class="masthead">
+  <svg width="34" height="34" viewBox="0 0 32 32" aria-hidden="true">
+    <path d="M16 2 L26 22 L16 17 L6 22 Z" fill="#FF6B1A"/>
+    <rect x="15" y="17" width="2" height="13" fill="#E8E4D8"/>
+  </svg>
+  <div>
+    <h1>Sawtooth Signal</h1>
+    <p class="tagline">Arrow flight recorder</p>
+  </div>
+</header>
+
 <div id="unsupported" class="banner" hidden>
-  Web Bluetooth is not available. Use Chrome on Android or desktop, over HTTPS.
+  This browser can't reach Bluetooth. Open this page in Chrome on Android
+  (over HTTPS) to connect to the arrow.
 </div>
-<div id="status" class="status">Not connected</div>
-<button id="btn-connect">Connect</button>
-<button id="btn-reconnect" hidden>Reconnect</button>
+
+<section class="range">
+  <button id="btn-connect">
+    <svg class="ret" viewBox="0 0 100 100" aria-hidden="true">
+      <circle cx="50" cy="50" r="47" fill="none" stroke-width="0.6"/>
+      <circle cx="50" cy="50" r="36" fill="none" stroke-width="0.4" stroke-dasharray="2 4"/>
+      <line class="hair" x1="50" y1="3"  x2="50" y2="14" stroke-width="1.2"/>
+      <line class="hair" x1="50" y1="86" x2="50" y2="97" stroke-width="1.2"/>
+      <line class="hair" x1="3"  y1="50" x2="14" y2="50" stroke-width="1.2"/>
+      <line class="hair" x1="86" y1="50" x2="97" y2="50" stroke-width="1.2"/>
+    </svg>
+    <small>ACQUIRE ARROW</small>
+    <span>Connect</span>
+  </button>
+  <div><button id="btn-reconnect" hidden>Reconnect</button></div>
+  <div id="status" class="status">No arrow on the line — wake it, then connect</div>
+</section>
 
 <section id="flights-section" hidden>
-  <h2>Flights</h2>
-  <div id="no-flights" hidden>No flights stored.</div>
+  <h2 class="eyebrow">Quiver</h2>
+  <p class="subhead">Recorded flights on this arrow</p>
+  <div id="no-flights" hidden>
+    No flights in the quiver yet. Shoot (or shake-test) the arrow, then
+    reconnect to pull the data.
+  </div>
   <table id="flight-table">
-    <thead><tr><th>Slot</th><th>Flight #</th><th>Samples</th><th>Duration</th><th>DL'd</th><th></th></tr></thead>
+    <thead><tr><th>Slot</th><th>Flight</th><th>Samples</th><th>Duration</th><th>Saved</th><th></th></tr></thead>
     <tbody></tbody>
   </table>
   <div id="xfer" hidden>
-    <progress id="xfer-progress" max="100" value="0"></progress>
+    <div class="flightpath"><progress id="xfer-progress" max="100" value="0"></progress></div>
     <div id="xfer-label"></div>
     <button id="btn-save-partial" hidden>Save partial CSV</button>
   </div>
@@ -44,9 +265,13 @@
 </section>
 
 <details id="config-section" hidden>
-  <summary>Configuration</summary>
+  <summary>Tuning<span class="subhead">Launch, landing &amp; recording setup</span></summary>
   <div id="config-fields"></div>
 </details>
+
+<footer>SAWTOOTH SIGNAL · FIELD UNIT · BLUETOOTH RANGE ~30 M (PHONE)</footer>
+
+</div>
 
 <script id="arrow-lib">
 'use strict';
