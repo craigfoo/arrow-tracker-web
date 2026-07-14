@@ -385,21 +385,37 @@ $('btn-reconnect').addEventListener('click', () => connectGatt().catch((e) => {
 }));
 
 /* --- Config editor --- */
-/* The ADXL372 config surface (chars 0x01/0x05/0x07) was removed from the
- * firmware along with the rest of the dead ADXL path. Valid ranges shown
- * in labels are enforced by firmware validation (rejects out-of-range). */
+/* Client-friendly dropdowns: option VALUES are the raw wire units the
+ * firmware expects (mg, milli-rad/s, ms, ODR code); labels are readable
+ * (g, °/s, minutes). An off-list value read from the device shows as a
+ * "(custom)" option rather than a blank select. */
 const CONFIG_FIELDS = [
-  { id: 0x0B, label: 'Launch Source', type: 'u8', input: 'select',
-    options: { 0: 'Accel', 1: 'Gyro', 2: 'Either' } },
-  { id: 0x02, label: 'Launch Threshold (mg, 500–200000)', type: 'u32', input: 'number' },
-  { id: 0x0C, label: 'Launch Gyro Threshold (mrad/s, 50–20000; FS rails at 2182)', type: 'u32', input: 'number' },
-  { id: 0x03, label: 'Inactivity Threshold (mg, 100–10000)', type: 'u32', input: 'number' },
-  { id: 0x04, label: 'Inactivity Timeout (ms, 500–30000)', type: 'u32', input: 'number' },
-  { id: 0x0D, label: 'Gyro Quiet — landing (mrad/s, 10–2000)', type: 'u32', input: 'number' },
-  { id: 0x06, label: 'LSM ODR (DT value)', type: 'u8', input: 'number' },
-  { id: 0x08, label: 'Record LSM Accel', type: 'u8', input: 'checkbox' },
-  { id: 0x09, label: 'Record LSM Gyro', type: 'u8', input: 'checkbox' },
-  { id: 0x0A, label: 'Record Magnetometer', type: 'u8', input: 'checkbox' },
+  { id: 0x0B, label: 'Launch Trigger', type: 'u8', input: 'select',
+    options: { 0: 'Acceleration', 1: 'Spin', 2: 'Either' } },
+  { id: 0x02, label: 'Launch Threshold', type: 'u32', input: 'select',
+    options: { 1000: '1 g', 1200: '1.2 g', 1500: '1.5 g', 2000: '2 g',
+               3000: '3 g', 4000: '4 g', 6000: '6 g', 8000: '8 g',
+               12000: '12 g', 16000: '16 g' } },
+  { id: 0x0C, label: 'Launch Spin Threshold', type: 'u32', input: 'select',
+    options: { 262: '15 °/s', 524: '30 °/s', 785: '45 °/s',
+               1047: '60 °/s', 1571: '90 °/s', 2007: '115 °/s (max)' } },
+  { id: 0x03, label: 'Landing Stillness — max acceleration', type: 'u32', input: 'select',
+    options: { 1100: '1.1 g', 1200: '1.2 g', 1500: '1.5 g',
+               2000: '2 g', 3000: '3 g' } },
+  { id: 0x0D, label: 'Landing Stillness — max spin', type: 'u32', input: 'select',
+    options: { 105: '6 °/s', 200: '11 °/s', 400: '23 °/s',
+               785: '45 °/s', 1047: '60 °/s' } },
+  { id: 0x04, label: 'Landing Confirmation Time', type: 'u32', input: 'select',
+    options: { 1000: '1 s', 2000: '2 s', 3000: '3 s', 5000: '5 s',
+               10000: '10 s', 30000: '30 s' } },
+  { id: 0x0E, label: 'Recovery Beacon Timeout', type: 'u32', input: 'select',
+    options: { 0: 'No timeout (beacon until found)', 300000: '5 min',
+               600000: '10 min', 900000: '15 min' } },
+  { id: 0x06, label: 'Recording Rate', type: 'u8', input: 'select',
+    options: { 6: '120 Hz', 7: '240 Hz', 8: '480 Hz', 9: '960 Hz' } },
+  { id: 0x08, label: 'Record Acceleration', type: 'u8', input: 'checkbox' },
+  { id: 0x09, label: 'Record Spin (gyro)', type: 'u8', input: 'checkbox' },
+  { id: 0x0A, label: 'Record Compass (magnetometer)', type: 'u8', input: 'checkbox' },
 ];
 
 function decodeCfg(field, dv) {
@@ -441,8 +457,18 @@ function buildConfigUi() {
 }
 
 function setFieldValue(field, el, value) {
-  if (field.input === 'checkbox') el.checked = value === 1;
-  else el.value = String(value);
+  if (field.input === 'checkbox') {
+    el.checked = value === 1;
+    return;
+  }
+  if (el.tagName === 'SELECT' &&
+      ![...el.options].some((o) => o.value === String(value))) {
+    const opt = document.createElement('option');
+    opt.value = String(value);
+    opt.textContent = `${value} (custom)`;
+    el.appendChild(opt);
+  }
+  el.value = String(value);
 }
 
 async function readConfig() {
