@@ -76,7 +76,9 @@
   #btn-connect:disabled { opacity: 0.45; cursor: not-allowed; }
   #btn-connect[hidden] { display: none; }   /* display:inline-grid would
 					      * otherwise defeat [hidden] */
-  #btn-disconnect, #btn-reconnect { margin-top: 0.75rem; }
+  #btn-arm, #btn-disconnect, #btn-reconnect { margin-top: 0.75rem; }
+  #btn-arm { border-color: var(--blaze); color: var(--blaze); background: transparent; }
+  #btn-arm:hover { background: rgba(255, 107, 26, 0.12); }
 
   /* --- Status line --- */
   .status {
@@ -235,6 +237,7 @@
     <span>Connect</span>
   </button>
   <div>
+    <button id="btn-arm" hidden>Arm arrow &amp; disconnect</button>
     <button id="btn-disconnect" hidden>Disconnect</button>
     <button id="btn-reconnect" hidden>Reconnect</button>
   </div>
@@ -426,6 +429,7 @@ async function connectGatt() {
   $('flights-section').hidden = false;
   $('btn-connect').hidden = true;
   $('btn-disconnect').hidden = false;
+  $('btn-arm').hidden = false;
   if (cfgErr) {
     setStatus(`Connected — config read failed: ${cfgErr.message}`, true);
   } else {
@@ -437,6 +441,7 @@ async function connectGatt() {
 function resetToConnectView() {
   $('flights-section').hidden = true;
   $('config-section').hidden = true;
+  $('btn-arm').hidden = true;
   $('btn-disconnect').hidden = true;
   $('btn-reconnect').hidden = true;
   $('btn-connect').hidden = false;
@@ -447,6 +452,7 @@ let userDisconnect = false;
 
 function onDisconnected() {
   $('btn-disconnect').hidden = true;
+  $('btn-arm').hidden = true;
   if (typeof onXferDisconnected === 'function') onXferDisconnected();
   if (userDisconnect) {
     userDisconnect = false;
@@ -626,6 +632,26 @@ $('btn-disconnect').addEventListener('click', () => {
     device.gatt.disconnect();
   } else {
     resetToConnectView();   /* link already gone — reset directly */
+  }
+});
+
+$('btn-arm').addEventListener('click', async () => {
+  if (xfer) {
+    setStatus('Download in progress — wait for it to finish', true);
+    return;
+  }
+  try {
+    await write(0x21, [0x04]);   /* DATA_CMD_GO_IDLE */
+  } catch (e) {
+    setStatus(`Arm failed: ${e.message}`, true);
+    return;
+  }
+  /* Armed — end the session so the arrow can sleep on its own clock */
+  if (device && device.gatt.connected) {
+    userDisconnect = true;
+    device.gatt.disconnect();
+  } else {
+    resetToConnectView();
   }
 });
 $('btn-reconnect').addEventListener('click', () => connectGatt().catch((e) => {
