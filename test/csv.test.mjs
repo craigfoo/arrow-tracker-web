@@ -26,6 +26,18 @@ test('buildCsv pads sub-second durations to three digits', () => {
   assert.ok(csv.includes('# Duration: 5.007 s\n'));
 });
 
+test('buildCsv includes a Device line when meta.device is set', () => {
+  const csv = lib.buildCsv({ ...meta, device: 'Sawtooth Signal 3C4D' }, samples);
+  const lines = csv.split('\n');
+  assert.equal(lines[0], '# Sawtooth Signal Flight Log');
+  assert.equal(lines[1], '# Device: Sawtooth Signal 3C4D');
+  assert.equal(lines[2], '# Flight: 42 (slot 3)');
+});
+
+test('buildCsv omits the Device line when meta.device is absent', () => {
+  assert.ok(!lib.buildCsv(meta, samples).includes('# Device:'));
+});
+
 test('buildCsv partial adds a PARTIAL comment with received vs expected', () => {
   const csv = lib.buildCsv({ ...meta, sampleCount: 9000 }, samples, { partial: true });
   assert.ok(csv.includes('# PARTIAL: received 2 of 9000 samples\n'));

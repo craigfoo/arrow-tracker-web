@@ -323,11 +323,14 @@ function parseSamples(dv) {
 /* CSV format mirrors firmware recorder_dump_csv(), minus the "# ODR:" line
  * (Flight Info over BLE does not carry odr_hz). */
 function buildCsv(meta, samples, { partial = false } = {}) {
-  const lines = [
-    '# Sawtooth Signal Flight Log',
+  const lines = ['# Sawtooth Signal Flight Log'];
+  if (meta.device) {
+    lines.push(`# Device: ${meta.device}`);
+  }
+  lines.push(
     `# Flight: ${meta.flightNumber} (slot ${meta.slot})`,
     `# Samples: ${meta.sampleCount}`,
-  ];
+  );
   if (partial) {
     lines.push(`# PARTIAL: received ${samples.length} of ${meta.sampleCount} samples`);
   }
@@ -535,12 +538,19 @@ async function downloadFlight(slot) {
   }
 }
 
+/* "Sawtooth Signal 3C4D" -> "3C4D" for filenames; '' if no device name */
+function deviceTag() {
+  return device && device.name ? device.name.split(' ').pop() : '';
+}
+
 function finishTransfer() {
   const { meta, samples } = xfer;
   clearTimeout(xfer.stallTimer);
   xfer = null;
   $('xfer').hidden = true;
-  saveBlob(buildCsv(meta, samples), `flight_${meta.flightNumber}.csv`);
+  const tag = deviceTag();
+  saveBlob(buildCsv({ ...meta, device: device && device.name }, samples),
+           `flight_${meta.flightNumber}${tag ? '_' + tag : ''}.csv`);
   setStatus(`Flight ${meta.flightNumber} downloaded (${samples.length} samples)`);
   refreshFlights().catch((e) => setStatus(`Refresh failed: ${e.message}`, true));
 }
@@ -565,8 +575,10 @@ function abortTransfer(reason) {
   const { meta, samples } = xfer;
   xfer = null;
   $('btn-save-partial').onclick = () => {
-    saveBlob(buildCsv(meta, samples, { partial: true }),
-             `flight_${meta.flightNumber}_partial.csv`);
+    const tag = deviceTag();
+    saveBlob(buildCsv({ ...meta, device: device && device.name }, samples,
+                      { partial: true }),
+             `flight_${meta.flightNumber}${tag ? '_' + tag : ''}_partial.csv`);
     $('xfer').hidden = true;
   };
 }
