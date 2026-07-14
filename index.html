@@ -74,30 +74,9 @@
     #btn-connect:hover .ret { animation: none; }
   }
   #btn-connect:disabled { opacity: 0.45; cursor: not-allowed; }
-
-  /* Locked-on state — same reticle, converged hairs, breathing blaze ring */
-  #reticle-locked {
-    display: inline-grid; place-items: center;
-    width: 11.5rem; height: 11.5rem; position: relative;
-    background: radial-gradient(circle at 50% 42%, #24332A 0%, var(--timber) 62%, var(--pine) 100%);
-    border: 1.5px solid var(--blaze); border-radius: 50%;
-    font-family: var(--disp); font-size: 1.05rem; font-weight: 700;
-    letter-spacing: 0.18em; text-transform: uppercase; color: var(--bone);
-    animation: lockpulse 2.6s ease-in-out infinite;
-  }
-  #reticle-locked[hidden] { display: none; }
-  #reticle-locked .ret { position: absolute; inset: 0; width: 100%; height: 100%; }
-  #reticle-locked .ret circle, #reticle-locked .ret line { stroke: var(--blaze); }
-  #reticle-locked .ret .dot { fill: var(--blaze); stroke: none; }
-  #reticle-locked span { position: relative; padding-left: 0.18em; margin-top: 5.2rem; }
-  @keyframes lockpulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 107, 26, 0.28), 0 0 22px rgba(255, 107, 26, 0.10); }
-    50%      { box-shadow: 0 0 0 7px rgba(255, 107, 26, 0.06), 0 0 40px rgba(255, 107, 26, 0.22); }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    #reticle-locked { animation: none; }
-  }
-  #btn-reconnect { margin-top: 0.75rem; }
+  #btn-connect[hidden] { display: none; }   /* display:inline-grid would
+					      * otherwise defeat [hidden] */
+  #btn-disconnect, #btn-reconnect { margin-top: 0.75rem; }
 
   /* --- Status line --- */
   .status {
@@ -255,19 +234,10 @@
     </svg>
     <span>Connect</span>
   </button>
-  <div id="reticle-locked" hidden aria-live="polite">
-    <svg class="ret" viewBox="0 0 100 100" aria-hidden="true">
-      <circle cx="50" cy="50" r="47" fill="none" stroke-width="0.8"/>
-      <circle cx="50" cy="50" r="36" fill="none" stroke-width="0.4" stroke-dasharray="2 4"/>
-      <circle cx="50" cy="50" r="2.4" class="dot"/>
-      <line class="hair" x1="50" y1="30" x2="50" y2="40" stroke-width="1.2"/>
-      <line class="hair" x1="50" y1="60" x2="50" y2="70" stroke-width="1.2"/>
-      <line class="hair" x1="30" y1="50" x2="40" y2="50" stroke-width="1.2"/>
-      <line class="hair" x1="60" y1="50" x2="70" y2="50" stroke-width="1.2"/>
-    </svg>
-    <span>Connected</span>
+  <div>
+    <button id="btn-disconnect" hidden>Disconnect</button>
+    <button id="btn-reconnect" hidden>Reconnect</button>
   </div>
-  <div><button id="btn-reconnect" hidden>Reconnect</button></div>
   <div id="status" class="status">No arrow on the line — wake it, then connect</div>
 </section>
 
@@ -455,7 +425,7 @@ async function connectGatt() {
   }
   $('flights-section').hidden = false;
   $('btn-connect').hidden = true;
-  $('reticle-locked').hidden = false;
+  $('btn-disconnect').hidden = false;
   if (cfgErr) {
     setStatus(`Connected — config read failed: ${cfgErr.message}`, true);
   } else {
@@ -465,7 +435,7 @@ async function connectGatt() {
 
 function onDisconnected() {
   setStatus('Disconnected', true);
-  $('reticle-locked').hidden = true;
+  $('btn-disconnect').hidden = true;
   $('btn-reconnect').hidden = false;
   if (typeof onXferDisconnected === 'function') onXferDisconnected();
 }
@@ -630,6 +600,10 @@ async function pollUntilErased() {
 }
 
 $('btn-connect').addEventListener('click', connect);
+$('btn-disconnect').addEventListener('click', () => {
+  /* gattserverdisconnected fires and onDisconnected handles the UI */
+  if (device && device.gatt.connected) device.gatt.disconnect();
+});
 $('btn-reconnect').addEventListener('click', () => connectGatt().catch((e) => {
   $('btn-reconnect').hidden = false;
   setStatus(`Reconnect failed: ${e.message}`, true);
