@@ -682,16 +682,14 @@ const fmtDur = (v) => v >= 60000
   ? `${Math.round(v / 60000)} min`
   : `${(v / 1000).toFixed(1).replace(/\.0$/, '')} s`;
 
+/* Launch Trigger (0x0B) / Launch Spin Threshold (0x0C) are firmware-only
+ * (nRF Connect): launch-from-sleep is always accel (the wake engine), so a
+ * spin trigger would behave inconsistently — hidden from the client UI. */
 const CONFIG_FIELDS = [
-  { id: 0x0B, label: 'Launch Trigger', type: 'u8', input: 'select',
-    options: { 0: 'Acceleration', 1: 'Spin', 2: 'Either' } },
   { id: 0x02, label: 'Launch Threshold', type: 'u32', input: 'select', fmt: fmtG,
     options: { 1000: '1 g', 1200: '1.2 g', 1500: '1.5 g', 2000: '2 g',
                3000: '3 g', 4000: '4 g', 6000: '6 g', 8000: '8 g',
                12000: '12 g', 16000: '16 g' } },
-  { id: 0x0C, label: 'Launch Spin Threshold', type: 'u32', input: 'select', fmt: fmtDps,
-    options: { 262: '15 °/s', 524: '30 °/s', 785: '45 °/s',
-               1047: '60 °/s', 1571: '90 °/s', 2007: '115 °/s (max)' } },
   { id: 0x03, label: 'Landing Stillness — max acceleration', type: 'u32', input: 'select', fmt: fmtG,
     options: { 1100: '1.1 g', 1200: '1.2 g', 1500: '1.5 g',
                2000: '2 g', 3000: '3 g' } },
